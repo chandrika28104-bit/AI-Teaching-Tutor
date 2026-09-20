@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "AI Teaching Tutor"
+description = "A classroom-style AI teaching experience where students learn any topic step by step through a digital board, teacher explanations, examples, questions, and progress tracking."
+version = "1.0.0"
+id = "artifacts/ai-teaching-tutor"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19727
+
+[services.development]
+run = "pnpm --filter @workspace/ai-teaching-tutor run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ai-teaching-tutor", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ai-teaching-tutor/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19727"
+BASE_PATH = "/"
