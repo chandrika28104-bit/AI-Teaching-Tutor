@@ -1,0 +1,92 @@
+IMPORTANT: STOP adding new features for now.
+
+I have tested the current AI Tutor and the teaching experience is not synchronized.
+
+Currently, the teacher/avatar/video is displayed in one area while the explanation and voice happen separately in another area.
+
+THIS IS NOT WHAT I WANT.
+
+I want the teaching experience to feel like ONE REAL TEACHER is teaching ONE LIVE LESSON.
+
+The teacher presentation, teacher voice, and digital board must work together as one synchronized teaching timeline.
+
+For example, when teaching Binary Search:
+
+1. The teacher appears on screen.
+2. The teacher starts speaking: "Today we are going to learn Binary Search."
+3. At the same time, the board shows:
+   BINARY SEARCH
+4. When the teacher says "The list must be sorted", the board should write/highlight:
+   The list must be sorted
+5. When the teacher explains the example, the board should simultaneously show the numbers and visually demonstrate the search.
+6. When the teacher says "Now we check the middle element", the middle element should be highlighted on the board at that moment.
+7. When the teacher asks a question, the teacher should stop speaking and wait for the student's response.
+8. After the student answers, the teacher should react and continue the lesson.
+
+The important requirement is:
+
+TEACHER VIDEO / AVATAR
++
+TEACHER VOICE
++
+BOARD ANIMATION
++
+EXPLANATION
++
+VISUALS
+
+must be synchronized as ONE LESSON.
+
+DO NOT show the teacher in one independent section and the explanation/voice in another independent section.
+
+The board should NOT simply display the whole lesson while the teacher talks.
+
+Instead, create a lesson timeline/sequence where every teaching step contains:
+
+- teacher speech
+- teacher state/action
+- board action
+- visual action
+- timing
+
+Example:
+
+STEP 1
+Teacher: "Today we will learn Binary Search."
+Board: Write "Binary Search"
+
+STEP 2
+Teacher: "First, the list must be sorted."
+Board: Show [10, 20, 30, 40, 50, 60, 70]
+Board action: highlight "sorted"
+
+STEP 3
+Teacher: "Now we check the middle element."
+Board action: highlight 40
+
+STEP 4
+Teacher: "Our target is 60, so we search the right half."
+Board action: visually remove/dim the left half and highlight the right half.
+
+The voice must play according to these steps.
+
+The board animation must happen according to these steps.
+
+The teacher must visually remain the focus while teaching.
+
+The student should feel like:
+
+"I am watching a teacher teach me this topic."
+
+NOT:
+
+"I am reading a chatbot while an unrelated avatar is playing."
+
+IMPORTANT:
+Do not redesign the whole application.
+Do not remove my existing AI teaching logic.
+Do not remove existing functionality.
+
+First fix the synchronization architecture and implement it for ONE topic, preferably Binary Search.
+
+After it works correctly for Binary Search, make the same system reusable for ANY topic.
