@@ -42,6 +42,31 @@ import { Route, Switch, Router as WouterRouter } from 'wouter';
 
 const queryClient = new QueryClient();
 
+type TeacherState =
+  | 'speaking'
+  | 'explaining'
+  | 'listening'
+  | 'thinking'
+  | 'asking'
+  | 'waiting'
+  | 'reacting'
+  | 'encouraging'
+  | 'looking';
+
+type BoardStatus = 'writing' | 'paused' | 'settled';
+
+const teacherStateCopy: Record<TeacherState, { label: string; detail: string }> = {
+  speaking: { label: 'Speaking', detail: 'Walking through the idea' },
+  explaining: { label: 'Explaining', detail: 'Making it simpler' },
+  listening: { label: 'Listening', detail: 'I’m following your thinking' },
+  thinking: { label: 'Thinking', detail: 'Let’s try a different angle' },
+  asking: { label: 'Asking you', detail: 'Your turn to reason it out' },
+  waiting: { label: 'Waiting for you', detail: 'Take your time' },
+  reacting: { label: 'Reacting', detail: 'I heard your answer' },
+  encouraging: { label: 'Encouraging', detail: 'That was a useful step' },
+  looking: { label: 'At the board', detail: 'Adding the next note' },
+};
+
 function LogoMark() {
   return (
     <div className="flex items-center gap-3" data-testid="brand-teachwell">
@@ -197,14 +222,62 @@ function ProgressRail({ lesson }: { lesson: Lesson }) {
   );
 }
 
+function TeacherAvatar({ state }: { state: TeacherState }) {
+  const copy = teacherStateCopy[state];
+  const isActive = state === 'speaking' || state === 'looking' || state === 'reacting';
+  const isWaiting = state === 'waiting' || state === 'listening';
+  return (
+    <div className="flex items-center gap-4" data-testid="teacher-avatar" data-teacher-state={state}>
+      <motion.div
+        key={state}
+        initial={{ opacity: .7, scale: .98, y: 4 }}
+        animate={{ opacity: 1, scale: 1, y: state === 'thinking' ? [0, -2, 0] : 0 }}
+        transition={{
+          duration: .35,
+          y: state === 'thinking' ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : { duration: .35 },
+        }}
+        className={`relative h-[112px] w-[104px] shrink-0 overflow-hidden rounded-[24px] border bg-[hsl(var(--secondary)/.72)] shadow-[0_10px_22px_hsl(164_31%_16%/.08)] ${state === 'encouraging' ? 'border-[hsl(var(--accent))]' : 'border-[hsl(var(--border))]'}`}
+      >
+        <div className={`absolute inset-3 rounded-[18px] transition ${isActive ? 'bg-[hsl(var(--accent)/.22)]' : isWaiting ? 'bg-[hsl(var(--primary)/.08)]' : 'bg-[hsl(var(--background)/.2)]'}`} />
+        <motion.img
+          src="/teacher-avatar.png"
+          alt="Your AI teacher"
+          className={`absolute -bottom-1 left-1/2 h-[124px] w-[124px] -translate-x-1/2 object-contain transition-transform duration-500 ${state === 'looking' ? '-translate-x-[54%]' : state === 'thinking' ? '-translate-x-[47%] rotate-[1deg]' : '-translate-x-1/2'}`}
+          animate={state === 'speaking' ? { y: [0, -1, 0] } : { y: 0 }}
+          transition={state === 'speaking' ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : { duration: .35 }}
+        />
+        {state === 'speaking' && (
+          <div className="absolute bottom-3 right-3 flex items-end gap-0.5 rounded-full bg-[hsl(var(--background)/.84)] px-2 py-1 shadow-sm" aria-label="Teacher is speaking">
+            {[0, 1, 2].map((bar) => <motion.span key={bar} className="w-0.5 rounded-full bg-[hsl(var(--primary))]" animate={{ height: [4, 10, 5] }} transition={{ duration: .7, repeat: Infinity, delay: bar * .12 }} />)}
+          </div>
+        )}
+        {(state === 'asking' || state === 'waiting') && (
+          <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--accent)/.7)] bg-[hsl(var(--background)/.9)] text-[11px] font-bold text-[hsl(var(--primary))]">
+            ?
+          </div>
+        )}
+      </motion.div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-[11px] font-bold">
+          <span className={`h-2 w-2 rounded-full ${state === 'encouraging' ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--primary))]'} ${isActive ? 'animate-pulse' : ''}`} />
+          {copy.label}
+        </div>
+        <div className="mt-1 max-w-[190px] text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">{copy.detail}</div>
+      </div>
+    </div>
+  );
+}
+
 function Board({
   step,
   boardMode,
   onToggle,
+  onStatusChange,
 }: {
   step: LessonStep;
   boardMode: 'chalkboard' | 'whiteboard';
   onToggle: (mode: 'chalkboard' | 'whiteboard') => void;
+  onStatusChange: (status: BoardStatus) => void;
 }) {
   const actions = step.boardActions ?? [];
   const [visibleActions, setVisibleActions] = useState<BoardAction[]>([]);
@@ -216,7 +289,8 @@ function Board({
     setVisibleActions([]);
     setActionIndex(0);
     setIsPlaying(true);
-  }, [step]);
+    onStatusChange(actions.length > 0 ? 'writing' : 'settled');
+  }, [step, actions.length, onStatusChange]);
 
   useEffect(() => {
     if (!isPlaying || actionIndex >= actions.length) return;
@@ -229,6 +303,7 @@ function Board({
         }
         return [...current, action];
       });
+      if (actionIndex + 1 >= actions.length) onStatusChange('settled');
       setActionIndex((current) => current + 1);
     }, actionIndex === 0 ? 480 : 820);
     return () => window.clearTimeout(timer);
@@ -238,6 +313,7 @@ function Board({
     setVisibleActions([]);
     setActionIndex(0);
     setIsPlaying(true);
+    onStatusChange('writing');
   };
 
   return (
@@ -251,7 +327,11 @@ function Board({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsPlaying((current) => !current)}
+            onClick={() => setIsPlaying((current) => {
+              const next = !current;
+              onStatusChange(next ? 'writing' : 'paused');
+              return next;
+            })}
             className="soft-focus flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-2.5 py-1.5 text-[10px] font-bold text-[hsl(var(--muted-foreground))] transition hover:text-[hsl(var(--foreground))]"
             aria-label={isPlaying ? 'Pause teacher writing' : 'Resume teacher writing'}
             data-testid="button-board-playback"
@@ -405,6 +485,7 @@ function TeacherPanel({
   speechSupported,
   onCheck,
   checkpointState,
+  teacherState,
   selectedOption,
   setSelectedOption,
   followUp,
@@ -422,6 +503,7 @@ function TeacherPanel({
   speechSupported: boolean;
   onCheck: () => void;
   checkpointState: CheckpointState;
+  teacherState: TeacherState;
   selectedOption: number | null;
   setSelectedOption: (value: number) => void;
   followUp: string;
@@ -436,6 +518,9 @@ function TeacherPanel({
         <div className="font-mono tracking-[.08em]">{String(currentStep + 1).padStart(2, '0')} / {String(totalSteps).padStart(2, '0')}</div>
       </div>
       <div className="rounded-[22px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.7)] p-5 shadow-[0_12px_30px_hsl(164_31%_16%/.05)] sm:p-7">
+        <div className="mb-6 rounded-[20px] border border-[hsl(var(--border)/.8)] bg-[hsl(var(--background)/.35)] p-3 sm:p-4">
+          <TeacherAvatar state={teacherState} />
+        </div>
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">
             <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[hsl(var(--accent))] shadow-[0_0_0_5px_hsl(var(--accent)/.13)]" />
@@ -597,6 +682,7 @@ function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesso
   const [followUp, setFollowUp] = useState('');
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [boardStatus, setBoardStatus] = useState<BoardStatus>('writing');
   const [practiceSelection, setPracticeSelection] = useState<number | null>(null);
   const [practiceState, setPracticeState] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -606,6 +692,7 @@ function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesso
     setCheckpointState('idle');
     setFollowUpAnswer('');
     setBoardMode(current.boardKind);
+    setBoardStatus('writing');
     setPracticeSelection(null);
     setPracticeState('idle');
   }, [lesson.currentStep, current.boardKind]);
@@ -691,6 +778,29 @@ function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesso
     if (practiceState === 'idle') return;
     setLesson({ ...lesson, phase: 'recap', progress: 100 });
   };
+  const teacherState: TeacherState = lesson.phase === 'practice'
+    ? practiceState === 'correct'
+      ? 'encouraging'
+      : practiceState === 'incorrect'
+        ? 'reacting'
+        : practiceSelection === null
+          ? 'listening'
+          : 'waiting'
+    : checkpointState === 'correct'
+      ? 'encouraging'
+      : checkpointState === 'simplified'
+        ? 'explaining'
+        : checkpointState === 'hint'
+          ? 'thinking'
+          : isSpeaking
+            ? 'speaking'
+            : boardStatus === 'writing'
+              ? 'looking'
+              : boardStatus === 'paused'
+                ? 'thinking'
+                : selectedOption === null
+                  ? 'asking'
+                  : 'waiting';
   const completed = lesson.phase === 'recap';
   return (
     <div className="classroom-shell noise min-h-[100dvh]">
@@ -723,8 +833,8 @@ function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesso
                   <div className="max-w-[250px] text-right text-[12px] leading-5 text-[hsl(var(--muted-foreground))]">Stay with the idea. There is no prize for rushing ahead.</div>
                 </div>
                 <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1.08fr)_minmax(380px,.92fr)] xl:gap-10">
-                  <Board step={current} boardMode={boardMode} onToggle={setBoardMode} />
-                  <TeacherPanel step={current} currentStep={lesson.currentStep} totalSteps={lesson.steps.length} onPrevious={previous} onNext={next} onSpeak={toggleSpeech} isSpeaking={isSpeaking} speechSupported={speechSupported} onCheck={checkAnswer} checkpointState={checkpointState} selectedOption={selectedOption} setSelectedOption={setSelectedOption} followUp={followUp} setFollowUp={setFollowUp} followUpAnswer={followUpAnswer} onFollowUp={sendFollowUp} />
+                  <Board step={current} boardMode={boardMode} onToggle={setBoardMode} onStatusChange={setBoardStatus} />
+                  <TeacherPanel step={current} currentStep={lesson.currentStep} totalSteps={lesson.steps.length} onPrevious={previous} onNext={next} onSpeak={toggleSpeech} isSpeaking={isSpeaking} speechSupported={speechSupported} onCheck={checkAnswer} checkpointState={checkpointState} teacherState={teacherState} selectedOption={selectedOption} setSelectedOption={setSelectedOption} followUp={followUp} setFollowUp={setFollowUp} followUpAnswer={followUpAnswer} onFollowUp={sendFollowUp} />
                 </div>
               </motion.div>
             )}
