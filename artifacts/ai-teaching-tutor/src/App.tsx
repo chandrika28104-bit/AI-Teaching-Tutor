@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowRight,
@@ -7,7 +7,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   Clock3,
   GraduationCap,
   Headphones,
@@ -20,133 +19,28 @@ import {
   Send,
   Sparkles,
   Volume2,
-  VolumeX,
   WandSparkles,
   X,
 } from 'lucide-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
+import {
+  LessonCheckpoint,
+  type CheckpointState,
+} from '@/components/lesson-checkpoint';
+import {
+  buildLesson,
+  defaultSetup,
+  type BoardAction,
+  type Lesson,
+  type LessonStep,
+  type TopicSetup,
+} from '@/lib/lesson-engine';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 
-type TopicSetup = {
-  topic: string;
-  level: string;
-  goal: string;
-  style: string;
-};
-
-type LessonStep = {
-  title: string;
-  teacherText: string;
-  boardContent: string;
-  boardKind: 'chalkboard' | 'whiteboard';
-  example: string;
-  question: string;
-  options: string[];
-  correctOption: number;
-  feedback: string;
-};
-
-type Lesson = {
-  topic: string;
-  steps: LessonStep[];
-  currentStep: number;
-  progress: number;
-  learnedConcepts: string[];
-  questionsAnswered: number;
-  weakAreas: string[];
-};
-
 const queryClient = new QueryClient();
-
-const defaultSetup: TopicSetup = {
-  topic: 'Photosynthesis',
-  level: 'Curious beginner',
-  goal: 'Understand the big picture',
-  style: 'Patient & visual',
-};
-
-const seededSteps: LessonStep[] = [
-  {
-    title: 'The quiet work of a leaf',
-    teacherText:
-      'Let’s start with the why. A plant cannot walk to a grocery store, so it makes its own food. Photosynthesis is the elegant process that turns light energy into stored chemical energy. The leaf is the plant’s little solar kitchen.',
-    boardContent: 'PHOTOSYNTHESIS\nlight energy  →  stored food\n\nWhere it happens\n• Mostly in the leaves\n• Inside chloroplasts',
-    boardKind: 'chalkboard',
-    example:
-      'Picture a sunlit windowsill. The plant is not “eating” the sunlight — it is capturing that energy and putting it into the bonds of a sugar molecule.',
-    question: 'What is the main job of photosynthesis?',
-    options: ['To make food using light energy', 'To absorb oxygen from the air', 'To cool the plant on hot days'],
-    correctOption: 0,
-    feedback:
-      'Exactly. Photosynthesis stores light energy in food, giving the plant a usable source of energy.',
-  },
-  {
-    title: 'The ingredients arrive',
-    teacherText:
-      'Every recipe needs ingredients. For photosynthesis, the plant takes in carbon dioxide through tiny openings in its leaves, and water travels upward from the roots. Sunlight provides the energy to rearrange them.',
-    boardContent: 'THE RECIPE\n\n6 CO₂  +  6 H₂O  +  light\n            ↓\n      C₆H₁₂O₆  +  6 O₂\n\ncarbon dioxide + water → glucose + oxygen',
-    boardKind: 'whiteboard',
-    example:
-      'Think of carbon dioxide as the carbon-rich flour and water as the liquid. Sunlight is the heat and chef’s energy that helps the recipe happen.',
-    question: 'Which two materials does the plant use to make glucose?',
-    options: ['Carbon dioxide and water', 'Oxygen and soil', 'Sunlight and oxygen'],
-    correctOption: 0,
-    feedback:
-      'Yes. Carbon dioxide and water are the raw materials. Light powers the transformation.',
-  },
-  {
-    title: 'Chlorophyll catches the light',
-    teacherText:
-      'Now meet chlorophyll, the green pigment inside chloroplasts. It absorbs particular wavelengths of light and reflects more green light back to our eyes. That reflected green is why many leaves look green.',
-    boardContent: 'CHLOROPHYLL\n\ncaptures → light energy\nreflects  → green light\n\nchloroplast = the cell’s\nsunlight-catching room',
-    boardKind: 'chalkboard',
-    example:
-      'It is like a set of tiny, perfectly placed solar panels. They do not absorb every color equally; the green light is the color that bounces back most noticeably.',
-    question: 'Why do many leaves appear green?',
-    options: ['Chlorophyll reflects green light', 'Leaves create green oxygen', 'Water turns the leaf green'],
-    correctOption: 0,
-    feedback:
-      'That’s it. Chlorophyll absorbs some light and reflects green wavelengths into our eyes.',
-  },
-  {
-    title: 'A useful exchange',
-    teacherText:
-      'The final exchange is beautifully practical. The plant keeps glucose as food or uses it to grow. Oxygen is released as a byproduct through the leaf. So the process feeds the plant while quietly replenishing the air around it.',
-    boardContent: 'THE PAYOFF\n\nplant keeps → glucose\nplant releases → oxygen\n\nlight in  •  food made  •  air refreshed',
-    boardKind: 'whiteboard',
-    example:
-      'A tree can turn a beam of afternoon light into new leaves, new roots, and new rings in its trunk. That is stored sunlight becoming structure.',
-    question: 'What happens to the oxygen made during photosynthesis?',
-    options: ['Much of it is released into the air', 'It becomes the plant’s roots', 'It disappears inside the soil'],
-    correctOption: 0,
-    feedback:
-      'Right. Oxygen is released into the surrounding air, while the plant uses or stores the glucose.',
-  },
-];
-
-function buildLesson(topic: string): Lesson {
-  const cleanTopic = topic.trim() || 'Photosynthesis';
-  return {
-    topic: cleanTopic,
-    steps: seededSteps.map((step, index) =>
-      index === 0 && cleanTopic.toLowerCase() !== 'photosynthesis'
-        ? {
-            ...step,
-            title: `A clear beginning: ${cleanTopic}`,
-            teacherText: `We’ll use the same patient, step-by-step rhythm to explore ${cleanTopic}. First, we’ll name the central idea, then connect it to an example you can picture. For today, the board is our shared place to think.`,
-          }
-        : step,
-    ),
-    currentStep: 0,
-    progress: 25,
-    learnedConcepts: [],
-    questionsAnswered: 0,
-    weakAreas: [],
-  };
-}
 
 function LogoMark() {
   return (
@@ -303,32 +197,200 @@ function ProgressRail({ lesson }: { lesson: Lesson }) {
   );
 }
 
-function Board({ step, boardMode, onToggle }: { step: LessonStep; boardMode: 'chalkboard' | 'whiteboard'; onToggle: (mode: 'chalkboard' | 'whiteboard') => void }) {
-  const lines = step.boardContent.split('\n');
+function Board({
+  step,
+  boardMode,
+  onToggle,
+}: {
+  step: LessonStep;
+  boardMode: 'chalkboard' | 'whiteboard';
+  onToggle: (mode: 'chalkboard' | 'whiteboard') => void;
+}) {
+  const actions = step.boardActions ?? [];
+  const [visibleActions, setVisibleActions] = useState<BoardAction[]>([]);
+  const [actionIndex, setActionIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
   const dark = boardMode === 'chalkboard';
+
+  useEffect(() => {
+    setVisibleActions([]);
+    setActionIndex(0);
+    setIsPlaying(true);
+  }, [step]);
+
+  useEffect(() => {
+    if (!isPlaying || actionIndex >= actions.length) return;
+    const timer = window.setTimeout(() => {
+      const action = actions[actionIndex];
+      setVisibleActions((current) => {
+        if (action.type === 'erase') {
+          if (action.targetId) return current.filter((item) => item.id !== action.targetId);
+          return current.slice(0, -1);
+        }
+        return [...current, action];
+      });
+      setActionIndex((current) => current + 1);
+    }, actionIndex === 0 ? 480 : 820);
+    return () => window.clearTimeout(timer);
+  }, [actionIndex, actions, isPlaying]);
+
+  const replay = () => {
+    setVisibleActions([]);
+    setActionIndex(0);
+    setIsPlaying(true);
+  };
+
   return (
     <div className="min-w-0">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]"><PencilLine size={14} /> On the board</div>
-        <div className="flex rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] p-1">
-          {(['chalkboard', 'whiteboard'] as const).map((mode) => (
-            <button key={mode} onClick={() => onToggle(mode)} className={`soft-focus rounded-lg px-2.5 py-1.5 text-[10px] font-bold capitalize transition ${boardMode === mode ? 'bg-[hsl(var(--foreground))] text-[hsl(var(--background))]' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`} data-testid={`button-board-${mode}`}>{mode === 'chalkboard' ? 'Chalk' : 'White'}</button>
-          ))}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">
+          <PencilLine size={14} /> On the board
+          <span className="font-mono text-[9px] font-normal tracking-[.08em] text-[hsl(var(--muted-foreground)/.7)]">
+            {Math.min(actionIndex, actions.length)} / {actions.length} notes
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsPlaying((current) => !current)}
+            className="soft-focus flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-2.5 py-1.5 text-[10px] font-bold text-[hsl(var(--muted-foreground))] transition hover:text-[hsl(var(--foreground))]"
+            aria-label={isPlaying ? 'Pause teacher writing' : 'Resume teacher writing'}
+            data-testid="button-board-playback"
+          >
+            {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+            {isPlaying ? 'Pause' : 'Resume'}
+          </button>
+          <button
+            onClick={replay}
+            className="soft-focus rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-2.5 py-1.5 text-[10px] font-bold text-[hsl(var(--muted-foreground))] transition hover:text-[hsl(var(--foreground))]"
+            data-testid="button-board-replay"
+          >
+            Replay
+          </button>
+          <div className="flex rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] p-1">
+            {(['chalkboard', 'whiteboard'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => onToggle(mode)}
+                className={`soft-focus rounded-lg px-2.5 py-1.5 text-[10px] font-bold capitalize transition ${boardMode === mode ? 'bg-[hsl(var(--foreground))] text-[hsl(var(--background))]' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}
+                data-testid={`button-board-${mode}`}
+              >
+                {mode === 'chalkboard' ? 'Chalk' : 'White'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-      <motion.div layout className={`min-h-[320px] rounded-[22px] p-7 sm:min-h-[370px] sm:p-10 ${dark ? 'chalkboard text-[hsl(40_33%_95%/.92)]' : 'whiteboard text-[hsl(var(--foreground))]'}`} data-testid="board-content">
-        <div className={`mb-9 flex items-center justify-between border-b pb-4 ${dark ? 'border-[hsl(40_33%_98%/.16)]' : 'border-[hsl(var(--foreground)/.14)]'}`}>
-          <span className={`font-mono text-[9px] uppercase tracking-[.2em] ${dark ? 'text-[hsl(29_79%_74%)]' : 'text-[hsl(var(--primary))]'}`}>{dark ? 'chalk notes / 01' : 'working notes / 01'}</span>
-          <span className={`h-2 w-2 rounded-full ${dark ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--primary))]'}`} />
+      <motion.div
+        layout
+        className={`min-h-[360px] rounded-[22px] p-7 sm:min-h-[430px] sm:p-10 ${dark ? 'chalkboard text-[hsl(40_33%_95%/.92)]' : 'whiteboard text-[hsl(var(--foreground))]'}`}
+        data-testid="board-content"
+      >
+        <div className={`mb-8 flex items-center justify-between border-b pb-4 ${dark ? 'border-[hsl(40_33%_98%/.16)]' : 'border-[hsl(var(--foreground)/.14)]'}`}>
+          <span className={`font-mono text-[9px] uppercase tracking-[.2em] ${dark ? 'text-[hsl(29_79%_74%)]' : 'text-[hsl(var(--primary))]'}`}>
+            {dark ? 'chalk notes / live' : 'working notes / live'}
+          </span>
+          <span className={`h-2 w-2 rounded-full ${isPlaying && actionIndex < actions.length ? 'animate-pulse' : ''} ${dark ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--primary))]'}`} />
         </div>
-        <div className="space-y-2" style={{ fontFamily: 'var(--app-font-serif)' }}>
-          {lines.map((line, index) => (
-            <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * .055 }} key={`${line}-${index}`} className={`whitespace-pre-wrap ${index === 0 ? 'mb-5 text-[19px] font-semibold tracking-[-.02em]' : line.includes('→') || line.includes('=') ? 'text-[15px] font-semibold' : 'text-[15px] leading-7'} ${line.startsWith('•') ? (dark ? 'text-[hsl(40_33%_95%/.65)]' : 'text-[hsl(var(--muted-foreground))]') : ''}`}>{line || '\u00a0'}</motion.div>
-          ))}
+        <div className="space-y-3" style={{ fontFamily: 'var(--app-font-serif)' }}>
+          <AnimatePresence initial={false}>
+            {visibleActions.map((action) => (
+              <BoardActionView key={`${action.id}-${actionIndex}`} action={action} dark={dark} />
+            ))}
+          </AnimatePresence>
         </div>
-        <div className={`mt-10 flex items-center gap-2 text-[10px] font-mono uppercase tracking-[.16em] ${dark ? 'text-[hsl(40_33%_95%/.44)]' : 'text-[hsl(var(--muted-foreground))]'}`}><span className="h-px w-8 bg-current" /> pause here and let it land</div>
+        {visibleActions.length === 0 && (
+          <div className={`flex min-h-[220px] items-center justify-center text-center text-sm italic ${dark ? 'text-[hsl(40_33%_95%/.48)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+            Your teacher is getting the first note ready…
+          </div>
+        )}
+        <div className={`mt-10 flex items-center gap-2 text-[10px] font-mono uppercase tracking-[.16em] ${dark ? 'text-[hsl(40_33%_95%/.44)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+          <span className="h-px w-8 bg-current" /> {actionIndex < actions.length ? 'teacher is writing' : 'pause here and let it land'}
+        </div>
       </motion.div>
     </div>
+  );
+}
+
+function BoardActionView({ action, dark }: { action: BoardAction; dark: boolean }) {
+  const base = dark ? 'text-[hsl(40_33%_95%/.92)]' : 'text-[hsl(var(--foreground))]';
+  const muted = dark ? 'text-[hsl(40_33%_95%/.62)]' : 'text-[hsl(var(--muted-foreground))]';
+  const mono = action.type === 'formula' || action.type === 'code' || action.type === 'graph' || action.type === 'table';
+
+  if (action.type === 'highlight') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: .98, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: .98 }}
+        className={`rounded-xl border-l-4 px-4 py-3 text-[13px] font-semibold ${dark ? 'border-[hsl(29_79%_74%)] bg-[hsl(29_79%_74%/.12)]' : 'border-[hsl(var(--accent-foreground))] bg-[hsl(var(--accent)/.25)]'} ${base}`}
+      >
+        {action.content}
+      </motion.div>
+    );
+  }
+
+  if (action.type === 'underline') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0 }}
+        className={`inline-block border-b-2 border-dashed pb-1 text-[13px] font-semibold ${dark ? 'border-[hsl(29_79%_74%)]' : 'border-[hsl(var(--primary))]'} ${base}`}
+      >
+        {action.content}
+      </motion.div>
+    );
+  }
+
+  if (action.type === 'draw' || action.type === 'diagram' || action.type === 'flowchart') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0 }}
+        className={`rounded-xl border border-dashed p-4 text-center text-[15px] leading-8 ${dark ? 'border-[hsl(40_33%_95%/.3)] bg-[hsl(40_33%_95%/.05)]' : 'border-[hsl(var(--primary)/.3)] bg-[hsl(var(--secondary)/.55)]'} ${base}`}
+      >
+        {action.content}
+      </motion.div>
+    );
+  }
+
+  if (action.type === 'table' && action.rows) {
+    return (
+      <motion.table initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={`w-full border-collapse text-left text-[12px] ${mono ? 'font-mono' : ''} ${base}`}>
+        <tbody>
+          {action.rows.map((row, rowIndex) => (
+            <tr key={`${action.id}-${rowIndex}`}>
+              {row.map((cell) => <td key={cell} className={`border px-3 py-2 ${dark ? 'border-[hsl(40_33%_95%/.2)]' : 'border-[hsl(var(--foreground)/.14)]'} ${rowIndex === 0 ? 'font-bold' : ''}`}>{cell}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </motion.table>
+    );
+  }
+
+  if (action.type === 'graph' && action.points) {
+    const points = action.points.map(([x, y]) => `${x * 10},${100 - y * 10}`).join(' ');
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl p-2">
+        <svg viewBox="0 0 100 100" className={`h-32 w-full ${dark ? 'text-[hsl(29_79%_74%)]' : 'text-[hsl(var(--primary))]'}`} role="img" aria-label={action.content ?? 'Teacher graph'}>
+          <path d="M 8 8 V 92 H 96" fill="none" stroke="currentColor" strokeWidth="1" opacity=".45" />
+          <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {action.content && <div className={`text-center text-[11px] ${muted}`}>{action.content}</div>}
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 10 }}
+      className={`whitespace-pre-wrap ${action.type === 'formula' ? 'text-[21px] font-semibold tracking-[-.02em]' : action.type === 'code' ? 'rounded-xl border p-4 text-[13px] leading-7' : 'text-[15px] leading-7'} ${action.type === 'code' ? (dark ? 'border-[hsl(40_33%_95%/.18)] bg-[hsl(40_33%_95%/.06)]' : 'border-[hsl(var(--foreground)/.14)] bg-[hsl(var(--secondary)/.55)]') : ''} ${action.type === 'formula' ? (dark ? 'text-[hsl(29_79%_74%)]' : 'text-[hsl(var(--primary))]') : base}`}
+    >
+      {action.content}
+    </motion.div>
   );
 }
 
@@ -341,7 +403,7 @@ function TeacherPanel({
   onSpeak,
   isSpeaking,
   speechSupported,
-  onAnswer,
+  onCheck,
   checkpointState,
   selectedOption,
   setSelectedOption,
@@ -358,8 +420,8 @@ function TeacherPanel({
   onSpeak: () => void;
   isSpeaking: boolean;
   speechSupported: boolean;
-  onAnswer: () => void;
-  checkpointState: 'idle' | 'correct' | 'incorrect';
+  onCheck: () => void;
+  checkpointState: CheckpointState;
   selectedOption: number | null;
   setSelectedOption: (value: number) => void;
   followUp: string;
@@ -367,7 +429,6 @@ function TeacherPanel({
   followUpAnswer: string;
   onFollowUp: () => void;
 }) {
-  const answered = checkpointState !== 'idle';
   return (
     <div className="flex min-w-0 flex-col">
       <div className="mb-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">
@@ -389,26 +450,13 @@ function TeacherPanel({
         {!speechSupported && <div className="mt-3 text-[10px] text-[hsl(var(--muted-foreground))]">Voice playback is unavailable in this browser. The lesson works beautifully without it.</div>}
       </div>
 
-      <div className="mt-5 rounded-[22px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.62)] p-5 sm:p-7" data-testid="checkpoint-card">
-        <div className="mb-5 flex items-start gap-3">
-          <div className="rounded-xl bg-[hsl(var(--accent)/.2)] p-2 text-[hsl(var(--primary))]"><CircleHelp size={18} /></div>
-          <div><div className="font-mono text-[9px] font-bold uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">Quick checkpoint</div><h3 className="mt-1 text-[16px] font-bold tracking-[-.02em]">{step.question}</h3></div>
-        </div>
-        <div className="space-y-2.5">
-          {step.options.map((option, index) => {
-            const isChosen = selectedOption === index;
-            const isRight = answered && index === step.correctOption;
-            const isWrong = answered && isChosen && index !== step.correctOption;
-            return (
-              <button key={option} onClick={() => !answered && setSelectedOption(index)} className={`soft-focus flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-[13px] font-medium transition ${isRight ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : isWrong ? 'border-[hsl(var(--destructive)/.5)] bg-[hsl(var(--destructive)/.08)] text-[hsl(var(--destructive))]' : isChosen ? 'border-[hsl(var(--primary)/.65)] bg-[hsl(var(--secondary))]' : 'border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/.4)] hover:bg-[hsl(var(--secondary)/.45)]'}`} data-testid={`button-option-${index}`}>
-                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${isRight ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : isWrong ? 'border-[hsl(var(--destructive))]' : 'border-[hsl(var(--border))]'}`}>{isRight ? <Check size={13} /> : String.fromCharCode(65 + index)}</span>{option}
-              </button>
-            );
-          })}
-        </div>
-        {answered && <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className={`mt-4 rounded-xl p-3 text-[12px] leading-5 ${checkpointState === 'correct' ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--destructive)/.08)] text-[hsl(var(--destructive))]'}`} data-testid="text-checkpoint-feedback">{checkpointState === 'correct' ? step.feedback : `Not quite yet. ${step.feedback}`}</motion.div>}
-        {!answered && <button disabled={selectedOption === null} onClick={onAnswer} className="soft-focus mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[hsl(var(--foreground))] py-3 text-[12px] font-bold text-[hsl(var(--background))] transition hover:bg-[hsl(var(--primary))] disabled:cursor-not-allowed disabled:opacity-35" data-testid="button-check-answer">Check my thinking <ArrowRight size={15} /></button>}
-      </div>
+      <LessonCheckpoint
+        step={step}
+        state={checkpointState}
+        selectedOption={selectedOption}
+        onSelect={setSelectedOption}
+        onCheck={onCheck}
+      />
 
       <div className="mt-5 rounded-[22px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.5)] p-4 sm:p-5">
         <div className="mb-3 flex items-center gap-2 text-[11px] font-bold"><Sparkles size={14} className="text-[hsl(var(--accent-foreground))]" /> Still wondering?</div>
@@ -427,21 +475,139 @@ function TeacherPanel({
   );
 }
 
+function PracticeView({
+  lesson,
+  selectedOption,
+  practiceState,
+  onSelect,
+  onSubmit,
+  onRecap,
+}: {
+  lesson: Lesson;
+  selectedOption: number | null;
+  practiceState: 'idle' | 'correct' | 'incorrect';
+  onSelect: (index: number) => void;
+  onSubmit: () => void;
+  onRecap: () => void;
+}) {
+  const question = lesson.practice;
+  const answered = practiceState !== 'idle';
+  return (
+    <motion.div
+      key="practice"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mx-auto max-w-[900px]"
+    >
+      <div className="mb-7">
+        <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-[hsl(var(--muted-foreground))]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" /> Practice
+        </div>
+        <h1
+          className="text-4xl font-semibold tracking-[-.06em] sm:text-6xl"
+          style={{ fontFamily: 'var(--app-font-serif)' }}
+        >
+          Let’s try one together.
+        </h1>
+        <p className="mt-4 max-w-xl text-[15px] leading-7 text-[hsl(var(--muted-foreground))]">
+          You have seen the idea. Now use it once without the teacher leading every step.
+        </p>
+      </div>
+
+      <div className="rounded-[26px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)] p-5 shadow-[0_20px_55px_hsl(164_31%_16%/.07)] sm:p-8">
+        <div className="rounded-[20px] bg-[hsl(var(--secondary)/.7)] p-5 sm:p-7">
+          <div className="mb-3 font-mono text-[9px] font-bold uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">
+            Small practice question
+          </div>
+          <h2 className="max-w-2xl text-xl font-bold leading-8 tracking-[-.03em] sm:text-2xl">
+            {question.prompt}
+          </h2>
+        </div>
+
+        <div className="mt-6 space-y-2.5">
+          {question.options.map((option, index) => {
+            const chosen = selectedOption === index;
+            const correct = answered && index === question.correctOption;
+            const wrong = practiceState === 'incorrect' && chosen;
+            return (
+              <button
+                key={option}
+                onClick={() => !answered && onSelect(index)}
+                className={`soft-focus flex w-full items-center gap-3 rounded-xl border p-4 text-left text-[13px] font-semibold transition ${
+                  correct
+                    ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]'
+                    : wrong
+                      ? 'border-[hsl(var(--destructive)/.5)] bg-[hsl(var(--destructive)/.08)] text-[hsl(var(--destructive))]'
+                      : chosen
+                        ? 'border-[hsl(var(--primary)/.65)] bg-[hsl(var(--secondary))]'
+                        : 'border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/.4)] hover:bg-[hsl(var(--secondary)/.45)]'
+                }`}
+                data-testid={`button-practice-option-${index}`}
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold">
+                  {correct ? <Check size={14} /> : String.fromCharCode(65 + index)}
+                </span>
+                {option}
+              </button>
+            );
+          })}
+        </div>
+
+        {practiceState === 'incorrect' && (
+          <div className="mt-5 rounded-xl bg-[hsl(var(--secondary)/.8)] p-4 text-[12px] leading-6 text-[hsl(var(--foreground)/.8)]">
+            That is a useful attempt. Look back at the board and notice the main pattern before you try the recap.
+          </div>
+        )}
+        {practiceState === 'correct' && (
+          <div className="mt-5 rounded-xl bg-[hsl(var(--primary)/.1)] p-4 text-[12px] leading-6 text-[hsl(var(--primary))]">
+            <strong>Nicely done. </strong>
+            {question.feedback}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          {!answered ? (
+            <button
+              disabled={selectedOption === null}
+              onClick={onSubmit}
+              className="soft-focus flex items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-5 py-3 text-[12px] font-bold text-[hsl(var(--primary-foreground))] shadow-[0_7px_16px_hsl(var(--primary)/.18)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35"
+              data-testid="button-submit-practice"
+            >
+              Check my answer <ArrowRight size={15} />
+            </button>
+          ) : (
+            <button
+              onClick={onRecap}
+              className="soft-focus flex items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-5 py-3 text-[12px] font-bold text-[hsl(var(--primary-foreground))] shadow-[0_7px_16px_hsl(var(--primary)/.18)] transition hover:-translate-y-0.5"
+              data-testid="button-see-recap"
+            >
+              See the recap <ArrowRight size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesson: (lesson: Lesson) => void; onRestart: () => void }) {
   const [boardMode, setBoardMode] = useState<'chalkboard' | 'whiteboard'>(lesson.steps[0].boardKind);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [checkpointState, setCheckpointState] = useState<'idle' | 'correct' | 'incorrect'>('idle');
+  const [checkpointState, setCheckpointState] = useState<CheckpointState>('idle');
   const [followUp, setFollowUp] = useState('');
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [practiceSelection, setPracticeSelection] = useState<number | null>(null);
+  const [practiceState, setPracticeState] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const current = lesson.steps[lesson.currentStep];
-  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
   useEffect(() => {
     setSelectedOption(null);
     setCheckpointState('idle');
     setFollowUpAnswer('');
     setBoardMode(current.boardKind);
+    setPracticeSelection(null);
+    setPracticeState('idle');
   }, [lesson.currentStep, current.boardKind]);
   useEffect(() => () => { if (speechSupported) window.speechSynthesis.cancel(); }, [speechSupported]);
 
@@ -457,41 +623,75 @@ function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesso
     utterance.pitch = 1;
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
-    speechRef.current = utterance;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
     setIsSpeaking(true);
   };
-  const answer = () => {
+  const checkAnswer = () => {
     if (selectedOption === null) return;
     const correct = selectedOption === current.correctOption;
-    setCheckpointState(correct ? 'correct' : 'incorrect');
+    if (correct) {
+      setCheckpointState('correct');
+    } else if (checkpointState === 'idle') {
+      setCheckpointState('hint');
+      setSelectedOption(null);
+    } else {
+      setCheckpointState('simplified');
+    }
     setLesson({
       ...lesson,
       questionsAnswered: lesson.questionsAnswered + 1,
-      learnedConcepts: correct && !lesson.learnedConcepts.includes(current.title) ? [...lesson.learnedConcepts, current.title] : lesson.learnedConcepts,
-      weakAreas: !correct && !lesson.weakAreas.includes(current.title) ? [...lesson.weakAreas, current.title] : lesson.weakAreas,
+      learnedConcepts: correct && !lesson.learnedConcepts.includes(current.title)
+        ? [...lesson.learnedConcepts, current.title]
+        : lesson.learnedConcepts,
+      weakAreas: !correct && !lesson.weakAreas.includes(current.title)
+        ? [...lesson.weakAreas, current.title]
+        : lesson.weakAreas,
     });
   };
   const next = () => {
+    if (checkpointState !== 'correct' && checkpointState !== 'simplified') return;
     if (lesson.currentStep === lesson.steps.length - 1) {
-      setLesson({ ...lesson, progress: 100 });
+      setLesson({ ...lesson, phase: 'practice', progress: 85 });
       return;
     }
     const nextStep = lesson.currentStep + 1;
-    setLesson({ ...lesson, currentStep: nextStep, progress: Math.round(((nextStep + 1) / lesson.steps.length) * 100) });
+    setLesson({
+      ...lesson,
+      currentStep: nextStep,
+      progress: Math.round(((nextStep + 1) / lesson.steps.length) * 70),
+    });
   };
   const previous = () => {
     if (lesson.currentStep === 0) return;
     const previousStep = lesson.currentStep - 1;
-    setLesson({ ...lesson, currentStep: previousStep, progress: Math.round(((previousStep + 1) / lesson.steps.length) * 100) });
+    setLesson({
+      ...lesson,
+      currentStep: previousStep,
+      phase: 'teaching',
+      progress: Math.round(((previousStep + 1) / lesson.steps.length) * 70),
+    });
   };
   const sendFollowUp = () => {
     if (!followUp.trim()) return;
     setFollowUpAnswer(`Good question. Put simply: ${followUp.trim().replace(/[?!.]+$/, '')} is connected to the same core idea on the board. Look for what goes in, what changes, and what comes out. That three-part pattern will help you reason it through.`);
     setFollowUp('');
   };
-  const completed = lesson.progress === 100 && lesson.currentStep === lesson.steps.length - 1;
+  const submitPractice = () => {
+    if (practiceSelection === null) return;
+    const correct = practiceSelection === lesson.practice.correctOption;
+    setPracticeState(correct ? 'correct' : 'incorrect');
+    setLesson({
+      ...lesson,
+      questionsAnswered: lesson.questionsAnswered + 1,
+      phase: 'practice',
+    });
+  };
+  const showRecap = () => {
+    if (practiceState === 'idle') return;
+    setLesson({ ...lesson, phase: 'recap', progress: 100 });
+  };
+  const completed = lesson.phase === 'recap';
   return (
     <div className="classroom-shell noise min-h-[100dvh]">
       <header className="sticky top-0 z-30 border-b border-[hsl(var(--border)/.8)] bg-[hsl(var(--background)/.88)] backdrop-blur-xl">
@@ -511,8 +711,11 @@ function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesso
               <motion.div key="complete" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-[1050px] rounded-[28px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.75)] p-7 shadow-[0_20px_55px_hsl(164_31%_16%/.08)] sm:p-12">
                 <div className="mx-auto max-w-2xl text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-[hsl(var(--accent))] text-[hsl(var(--primary))] shadow-[6px_6px_0_hsl(var(--primary)/.13)]"><Check size={30} strokeWidth={2.5} /></div><div className="mt-7 font-mono text-[10px] uppercase tracking-[.2em] text-[hsl(var(--muted-foreground))]">Lesson complete</div><h1 className="mt-3 text-4xl font-semibold tracking-[-.06em] sm:text-6xl" style={{ fontFamily: 'var(--app-font-serif)' }}>That idea is yours now.</h1><p className="mx-auto mt-5 max-w-lg text-[15px] leading-7 text-[hsl(var(--muted-foreground))]">You walked through {lesson.topic} one careful step at a time. That is how understanding sticks.</p></div>
                 <div className="mx-auto mt-10 grid max-w-2xl gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-[hsl(var(--secondary)/.7)] p-4"><div className="font-mono text-2xl font-bold">{lesson.questionsAnswered}</div><div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">checkpoints answered</div></div><div className="rounded-2xl bg-[hsl(var(--secondary)/.7)] p-4"><div className="font-mono text-2xl font-bold">{lesson.learnedConcepts.length}</div><div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">ideas gathered</div></div><div className="rounded-2xl bg-[hsl(var(--secondary)/.7)] p-4"><div className="font-mono text-2xl font-bold">8 min</div><div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">focused together</div></div></div>
+                {lesson.weakAreas.length > 0 && <div className="mx-auto mt-5 max-w-2xl rounded-2xl bg-[hsl(var(--accent)/.14)] p-4 text-left text-[12px] leading-6 text-[hsl(var(--foreground)/.75)]"><strong className="text-[hsl(var(--primary))]">A note for next time: </strong>We slowed down around {lesson.weakAreas.join(', ')}. That is useful information, not a failure.</div>}
                 <div className="mt-9 flex justify-center"><button onClick={onRestart} className="soft-focus flex items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-5 py-3 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-start-another">Teach me something else <ArrowRight size={16} /></button></div>
               </motion.div>
+            ) : lesson.phase === 'practice' ? (
+              <PracticeView lesson={lesson} selectedOption={practiceSelection} practiceState={practiceState} onSelect={setPracticeSelection} onSubmit={submitPractice} onRecap={showRecap} />
             ) : (
               <motion.div key={lesson.currentStep} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .35 }} className="mx-auto max-w-[1200px]">
                 <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
@@ -521,7 +724,7 @@ function LessonView({ lesson, setLesson, onRestart }: { lesson: Lesson; setLesso
                 </div>
                 <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1.08fr)_minmax(380px,.92fr)] xl:gap-10">
                   <Board step={current} boardMode={boardMode} onToggle={setBoardMode} />
-                  <TeacherPanel step={current} currentStep={lesson.currentStep} totalSteps={lesson.steps.length} onPrevious={previous} onNext={next} onSpeak={toggleSpeech} isSpeaking={isSpeaking} speechSupported={speechSupported} onAnswer={answer} checkpointState={checkpointState} selectedOption={selectedOption} setSelectedOption={setSelectedOption} followUp={followUp} setFollowUp={setFollowUp} followUpAnswer={followUpAnswer} onFollowUp={sendFollowUp} />
+                  <TeacherPanel step={current} currentStep={lesson.currentStep} totalSteps={lesson.steps.length} onPrevious={previous} onNext={next} onSpeak={toggleSpeech} isSpeaking={isSpeaking} speechSupported={speechSupported} onCheck={checkAnswer} checkpointState={checkpointState} selectedOption={selectedOption} setSelectedOption={setSelectedOption} followUp={followUp} setFollowUp={setFollowUp} followUpAnswer={followUpAnswer} onFollowUp={sendFollowUp} />
                 </div>
               </motion.div>
             )}
